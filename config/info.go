@@ -2,13 +2,11 @@ package config
 
 var (
 	Logo = `
-     _   
-    | | _ 
- _  | |/ )  _    _
-[_] | | /  | |  | |
- _  | | \  | |  | |
-| | | |\ \ | |__| |
-|_| |_| \_) \____/      v0.1
+  _   _  __          _____   _   _
+ (_) | |/ /  _   _  |  ___| (_) | |   ___
+ | | | ' /  | | | | | |_    | | | |  / _ \
+ | | | . \  | |_| | |  _|   | | | | |  __/
+ |_| |_|\_\  \__,_| |_|     |_| |_|  \___|    v0.1
 `
 	Statement   = `iKurum [cyan@ikurum.cn] Open Source with MIT License`
 	VersionDesc = `
@@ -34,13 +32,13 @@ Global Options:
 
 Usage of ikufile:
     无参数 
-        读取 .ikufile.yaml 配置，开始监听并工作
+        读取 ikufile.yaml 配置，开始监听并工作
     init 
-        初始化 ikufile, (在当前目录或指定目录)生成 .ikufile.yaml 配置文件
+        初始化 ikufile, (在当前目录或指定目录)生成 ikufile.yaml 配置文件
     exec 
         尝试运行定义的 command 命令
     daemon 
-        读取 .ikufile.yaml 配置，以守护进程的方式运行在后台
+        读取 ikufile.yaml 配置，以守护进程的方式运行在后台
     stop 
         停止守护进程
     version 
@@ -104,7 +102,8 @@ command:
     #    {{changed}} 文件更新的本地时间戳(纳秒,如 1537326690523046400)
     # 变量占位符使用示例：cp {{file}} /root/sync -rf  、 myCommand --{{ext}} {{changed}}
     exec:
-        - go version
+        - go env -w GOOS=windows
+        - go run .
 
     # 文件变更后命令在xx毫秒后才会执行，单位为毫秒
     # 一个变更事件(A)如果在定义的延迟时间(t)内, 又有新的文件变更事件(B), 那么A会取消执行。
@@ -137,9 +136,11 @@ instruction:
     #   ignore-warn        ikufile 自身的 warn 信息会被丢弃
     #   ignore-info        ikufile 自身的 info 信息会被丢弃
     #   ignore-exec-error  执行 'exec' 出错仍继续执行下面的命令而不退出 
+    #   clear-when-exec    执行 'exec' 前，清空cmd 
 
     #- should-finish
-    #- exec-when-start
+    - exec-when-start
+    - clear-when-exec
     - ignore-warn
 `
 )

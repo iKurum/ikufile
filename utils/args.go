@@ -9,7 +9,6 @@ import (
 	c "github.com/iKurum/ikufile/config"
 	"github.com/iKurum/ikufile/daemon"
 	"github.com/iKurum/ikufile/task"
-	"github.com/iKurum/ikufile/utils/check"
 	logs "github.com/iKurum/ikufile/utils/log"
 )
 
@@ -29,7 +28,7 @@ func RebuildArgs() {
 	}
 
 	if len(os.Args) == loadI+1 {
-		logs.Exit("unknown .ikufile.yaml path, use `ikufile help` show help info.")
+		logs.Exit("unknown ikufile.yaml path, use `ikufile help` show help info.")
 	}
 
 	yp := os.Args[loadI+1]
@@ -59,9 +58,6 @@ func parseArgs() {
 		done := make(chan bool)
 		task.InitWatch()
 		defer task.Watcher.Close()
-		if check.KeyInInstruction(c.InstExecWhenStart) {
-			task.TaskMan.Run(new(task.ChangedFile))
-		}
 		<-done
 		return
 	case len(os.Args) > 1:
@@ -85,7 +81,7 @@ func parseArgs() {
 		case "init":
 			_, err := ioutil.ReadFile(c.YamlPath)
 			if err == nil {
-				logs.Error("profile .ikufile.yaml already exists.")
+				logs.Error("profile ikufile.yaml already exists.")
 				logs.Exit("delete it first when you want to regenerate ikufile conf file")
 			}
 			err = ioutil.WriteFile(c.YamlPath, []byte(c.ExampleFileGirl), 0644)
@@ -93,7 +89,7 @@ func parseArgs() {
 				logs.Error("profile ikufile create failed! ", err)
 				return
 			}
-			logs.Info("profile ikufile created ok")
+			logs.Info("profile ikufile.yaml created ok")
 			return
 		case "exec":
 			parseConfig()

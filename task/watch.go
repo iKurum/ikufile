@@ -25,6 +25,8 @@ func InitWatch() {
 		logs.Exit(err)
 	}
 	TaskMan = NewTaskMan(c.Cfg.Command.DelayMillSecond, c.Cfg.Notifier.CallUrl)
+	addWatcher()
+
 	go func() {
 		for {
 			select {
@@ -32,10 +34,14 @@ func InitWatch() {
 				if !ok {
 					return
 				}
+
+				// 清屏
+				if check.KeyInInstruction(c.InstClearWhenExec) {
+					fmt.Println("\033[H\033[2J")
+				}
 				// directory structure changes, dynamically add, delete and monitor according to rules
 				// TODO // this method cannot be triggered when the parent folder of the change folder is not monitored
 				go watchChangeHandler(event)
-				fmt.Println("\033[H\033[2J")
 				eventDispatcher(event)
 			case err, ok := <-Watcher.Errors:
 				if !ok {
@@ -45,9 +51,9 @@ func InitWatch() {
 			}
 		}
 	}()
-	addWatcher()
 }
 
+// 拼接 exec
 func cmdParse2Array(s string, cf *ChangedFile) []string {
 	a := strings.Split(s, " ")
 	r := make([]string, 0)
@@ -59,6 +65,7 @@ func cmdParse2Array(s string, cf *ChangedFile) []string {
 	return r
 }
 
+// 替换exec 规则
 func strParseRealStr(s string, cf *ChangedFile) string {
 	return strings.ReplaceAll(
 		strings.ReplaceAll(
@@ -72,8 +79,9 @@ func strParseRealStr(s string, cf *ChangedFile) string {
 	)
 }
 
+// 持续文件监听
 func watchChangeHandler(event fsnotify.Event) {
-	// stop the fileboy daemon process when the .fileboy.pid file is changed
+	// stop the ikufile daemon process when the .ikufile.pid file is changed
 	if event.Name == c.GetPidFile() &&
 		(event.Op == fsnotify.Remove ||
 			event.Op == fsnotify.Write ||
@@ -99,6 +107,7 @@ func watchChangeHandler(event fsnotify.Event) {
 			continue
 		}
 
+		// 新增未监听的文件/已监听的文件重命名
 		_ = Watcher.Remove(event.Name)
 		err := Watcher.Add(event.Name)
 		if err == nil {
@@ -110,6 +119,8 @@ func watchChangeHandler(event fsnotify.Event) {
 	}
 
 	if do {
+		// 新增未监听的文件/已监听的文件重命名
+		// 直接返回
 		return
 	}
 
@@ -125,10 +136,14 @@ func watchChangeHandler(event fsnotify.Event) {
 	}
 }
 
+// 文件状态更新
 func eventDispatcher(event fsnotify.Event) {
 	if event.Name == c.GetPidFile() {
+		// daemon pid 文件改动
 		return
 	}
+
+	// 判断文件后缀
 	ext := path.Ext(event.Name)
 	if len(c.Cfg.Monitor.Types) > 0 &&
 		!check.KeyInMonitorTypesMap(".*", c.Cfg) &&
@@ -136,10 +151,12 @@ func eventDispatcher(event fsnotify.Event) {
 		return
 	}
 
+	// 判断是否监听该事件
 	op := c.IoeventMapStr[event.Op]
 	if len(c.Cfg.Monitor.Events) != 0 && !inStrArray(op, c.Cfg.Monitor.Events) {
 		return
 	}
+
 	logs.UInfo("EVENT ", event.Op.String(), ":", event.Name)
 	TaskMan.Put(&ChangedFile{
 		Name:    relativePath(c.ProjectFolder, event.Name),
@@ -149,14 +166,17 @@ func eventDispatcher(event fsnotify.Event) {
 	})
 }
 
+// 文件监听 初始
 func addWatcher() {
-	logs.Info("collecting directory information...")
+	logs.UInfo("collecting directory information...")
+
 	dirsMap := map[string]bool{}
 	for _, dir := range c.Cfg.Monitor.ExceptDirs {
 		if dir == "." {
 			logs.Exit("exceptDirs must is not project root path ! err path:", dir)
 		}
 	}
+
 	for _, dir := range c.Cfg.Monitor.IncludeDirs {
 		darr := dirParse2Array(dir)
 		if len(darr) < 1 || len(darr) > 2 {
@@ -189,7 +209,6 @@ func addWatcher() {
 				c.Cfg.Monitor.IncludeDirsRec[md] = true
 			}
 		}
-
 	}
 
 	for dir := range dirsMap {
@@ -200,10 +219,16 @@ func addWatcher() {
 		}
 	}
 	logs.Info("total monitored dirs: " + strconv.Itoa(len(dirsMap)))
-	logs.Info("ikufile is ready.")
+	logs.UInfo("ikufile is ready.")
 	c.Cfg.Monitor.DirsMap = dirsMap
+
+	if check.KeyInInstruction(c.InstExecWhenStart) {
+		logs.UInfo("InstExecWhenStart")
+		TaskMan.Run(new(ChangedFile))
+	}
 }
 
+// 排除不监听文件/夹
 func hitDirs(d string, dirs *[]string) bool {
 	d += "/"
 	for _, v := range *dirs {
@@ -214,6 +239,7 @@ func hitDirs(d string, dirs *[]string) bool {
 	return false
 }
 
+// 当前变更是否在监听事件内
 func inStrArray(s string, arr []string) bool {
 	for _, v := range arr {
 		if s == v {
@@ -223,6 +249,7 @@ func inStrArray(s string, arr []string) bool {
 	return false
 }
 
+// 返回文件完整路径(替换反斜杠)
 func relativePath(folder, p string) string {
 	s := strings.ReplaceAll(strings.TrimPrefix(p, folder), "\\", "/")
 	if strings.HasPrefix(s, "/") && len(s) > 1 {
@@ -231,6 +258,7 @@ func relativePath(folder, p string) string {
 	return s
 }
 
+// 递归判断文件是否需要监听
 func listFile(folder string, fun func(string)) {
 	files, _ := ioutil.ReadDir(folder)
 	for _, file := range files {
@@ -245,6 +273,7 @@ func listFile(folder string, fun func(string)) {
 	}
 }
 
+// 返回监听文件的数组
 func dirParse2Array(s string) []string {
 	a := strings.Split(s, ",")
 	r := make([]string, 0)

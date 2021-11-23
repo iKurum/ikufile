@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	log.SetPrefix("IKUFILE ")
+	log.SetPrefix("[IKUFILE]~")
 	log.SetFlags(2)
 	log.SetOutput(os.Stdout)
 

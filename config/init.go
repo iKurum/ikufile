@@ -13,5 +13,5 @@ func StopSelf() {
 }
 
 func GetPidFile() string {
-	return ProjectFolder + "/.fileboy.pid"
+	return ProjectFolder + "/.ikufile.pid"
 }

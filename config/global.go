@@ -4,6 +4,7 @@ import "github.com/fsnotify/fsnotify"
 
 var (
 	InstExecWhenStart   = "exec-when-start"
+	InstClearWhenExec   = "clear-when-exec"
 	InstShouldFinish    = "should-finish"
 	InstIgnoreWarn      = "ignore-warn"
 	InstIgnoreInfo      = "ignore-info"
@@ -13,7 +14,7 @@ var (
 
 var (
 	ProjectFolder = "."
-	YamlName      = ".ikufile.yaml"
+	YamlName      = "ikufile.yaml"
 	YamlPath      = ""
 	IoeventMapStr = map[fsnotify.Op]string{
 		fsnotify.Write:  "write",
