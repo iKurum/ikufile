@@ -7,14 +7,13 @@ import (
 
 	c "github.com/iKurum/ikufile/config"
 	"github.com/iKurum/ikufile/utils/check"
+	notify "github.com/iKurum/ikufile/utils/fs"
 	logs "github.com/iKurum/ikufile/utils/log"
-
-	"github.com/fsnotify/fsnotify"
 )
 
 var (
 	TaskMan *Task
-	Watcher *fsnotify.Watcher
+	Watcher *notify.Batcher
 )
 
 type NetNotifier struct {

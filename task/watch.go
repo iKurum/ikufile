@@ -10,6 +10,7 @@ import (
 
 	c "github.com/iKurum/ikufile/config"
 	"github.com/iKurum/ikufile/utils/check"
+	notify "github.com/iKurum/ikufile/utils/fs"
 	logs "github.com/iKurum/ikufile/utils/log"
 
 	"github.com/fsnotify/fsnotify"
@@ -17,10 +18,10 @@ import (
 
 func InitWatch() {
 	var err error
-	if Watcher != nil {
-		_ = Watcher.Close()
+	if Watcher.Watcher != nil {
+		_ = Watcher.Watcher.Close()
 	}
-	Watcher, err = fsnotify.NewWatcher()
+	Watcher, err = notify.New(1 * time.Second)
 	if err != nil {
 		logs.Exit(err)
 	}
@@ -30,19 +31,15 @@ func InitWatch() {
 	go func() {
 		for {
 			select {
-			case event, ok := <-Watcher.Events:
-				if !ok {
-					return
-				}
-
+			case evs := <-Watcher.Events:
 				// 清屏
 				if check.KeyInInstruction(c.InstClearWhenExec) {
 					fmt.Println("\033[H\033[2J")
 				}
 				// directory structure changes, dynamically add, delete and monitor according to rules
 				// TODO // this method cannot be triggered when the parent folder of the change folder is not monitored
-				go watchChangeHandler(event)
-				eventDispatcher(event)
+				go watchChangeHandler(evs)
+				eventDispatcher(evs)
 			case err, ok := <-Watcher.Errors:
 				if !ok {
 					return
@@ -80,90 +77,94 @@ func strParseRealStr(s string, cf *ChangedFile) string {
 }
 
 // 持续文件监听
-func watchChangeHandler(event fsnotify.Event) {
-	// stop the ikufile daemon process when the .ikufile.pid file is changed
-	if event.Name == c.GetPidFile() &&
-		(event.Op == fsnotify.Remove ||
-			event.Op == fsnotify.Write ||
-			event.Op == fsnotify.Rename) {
-		logs.UInfo("exit daemon process")
-		c.StopSelf()
-		return
-	}
-	if event.Op != fsnotify.Create && event.Op != fsnotify.Rename {
-		return
-	}
-	_, err := ioutil.ReadDir(event.Name)
-	if err != nil {
-		return
-	}
-	do := false
-	for rec := range c.Cfg.Monitor.IncludeDirsRec {
-		if !strings.HasPrefix(event.Name, rec) {
-			continue
+func watchChangeHandler(events []fsnotify.Event) {
+	for _, event := range events {
+		// stop the ikufile daemon process when the .ikufile.pid file is changed
+		if event.Name == c.GetPidFile() &&
+			(event.Op == fsnotify.Remove ||
+				event.Op == fsnotify.Write ||
+				event.Op == fsnotify.Rename) {
+			logs.UInfo("exit daemon process")
+			c.StopSelf()
+			return
 		}
-		// check exceptDirs
-		if hitDirs(event.Name, &c.Cfg.Monitor.ExceptDirs) {
-			continue
+		if event.Op != fsnotify.Create && event.Op != fsnotify.Rename {
+			return
+		}
+		_, err := ioutil.ReadDir(event.Name)
+		if err != nil {
+			return
+		}
+		do := false
+		for rec := range c.Cfg.Monitor.IncludeDirsRec {
+			if !strings.HasPrefix(event.Name, rec) {
+				continue
+			}
+			// check exceptDirs
+			if hitDirs(event.Name, &c.Cfg.Monitor.ExceptDirs) {
+				continue
+			}
+
+			// 新增未监听的文件/已监听的文件重命名
+			_ = Watcher.Remove(event.Name)
+			err := Watcher.Add(event.Name)
+			if err == nil {
+				do = true
+				logs.Info("watcher add -> ", event.Name)
+			} else {
+				logs.Warning("watcher add faild:", event.Name, err)
+			}
 		}
 
-		// 新增未监听的文件/已监听的文件重命名
-		_ = Watcher.Remove(event.Name)
-		err := Watcher.Add(event.Name)
-		if err == nil {
-			do = true
-			logs.Info("watcher add -> ", event.Name)
-		} else {
-			logs.Warning("watcher add faild:", event.Name, err)
+		if do {
+			// 新增未监听的文件/已监听的文件重命名
+			// 直接返回
+			return
 		}
-	}
 
-	if do {
-		// 新增未监听的文件/已监听的文件重命名
-		// 直接返回
-		return
-	}
-
-	// check map
-	if _, ok := c.Cfg.Monitor.DirsMap[event.Name]; ok {
-		_ = Watcher.Remove(event.Name)
-		err := Watcher.Add(event.Name)
-		if err == nil {
-			logs.Info("watcher add -> ", event.Name)
-		} else {
-			logs.Warning("watcher add faild:", event.Name, err)
+		// check map
+		if _, ok := c.Cfg.Monitor.DirsMap[event.Name]; ok {
+			_ = Watcher.Remove(event.Name)
+			err := Watcher.Add(event.Name)
+			if err == nil {
+				logs.Info("watcher add -> ", event.Name)
+			} else {
+				logs.Warning("watcher add faild:", event.Name, err)
+			}
 		}
 	}
 }
 
 // 文件状态更新
-func eventDispatcher(event fsnotify.Event) {
-	if event.Name == c.GetPidFile() {
-		// daemon pid 文件改动
-		return
-	}
+func eventDispatcher(events []fsnotify.Event) {
+	for _, event := range events {
+		if event.Name == c.GetPidFile() {
+			// daemon pid 文件改动
+			return
+		}
 
-	// 判断文件后缀
-	ext := path.Ext(event.Name)
-	if len(c.Cfg.Monitor.Types) > 0 &&
-		!check.KeyInMonitorTypesMap(".*", c.Cfg) &&
-		!check.KeyInMonitorTypesMap(ext, c.Cfg) {
-		return
-	}
+		// 判断文件后缀
+		ext := path.Ext(event.Name)
+		if len(c.Cfg.Monitor.Types) > 0 &&
+			!check.KeyInMonitorTypesMap(".*", c.Cfg) &&
+			!check.KeyInMonitorTypesMap(ext, c.Cfg) {
+			return
+		}
 
-	// 判断是否监听该事件
-	op := c.IoeventMapStr[event.Op]
-	if len(c.Cfg.Monitor.Events) != 0 && !inStrArray(op, c.Cfg.Monitor.Events) {
-		return
-	}
+		// 判断是否监听该事件
+		op := c.IoeventMapStr[event.Op]
+		if len(c.Cfg.Monitor.Events) != 0 && !inStrArray(op, c.Cfg.Monitor.Events) {
+			return
+		}
 
-	logs.UInfo("EVENT ", event.Op.String(), ":", event.Name)
-	TaskMan.Put(&ChangedFile{
-		Name:    relativePath(c.ProjectFolder, event.Name),
-		Changed: time.Now().UnixNano(),
-		Ext:     ext,
-		Event:   op,
-	})
+		logs.UInfo("EVENT ", event.Op.String(), ":", event.Name)
+		TaskMan.Put(&ChangedFile{
+			Name:    relativePath(c.ProjectFolder, event.Name),
+			Changed: time.Now().UnixNano(),
+			Ext:     ext,
+			Event:   op,
+		})
+	}
 }
 
 // 文件监听 初始
